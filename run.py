@@ -5,6 +5,7 @@ import picamera.array
 import numpy as np
 import cv2
 import math
+from matplotlib import pyplot as plt
 
 DOWNSAMPLE_SIZE = 128
 
@@ -18,8 +19,8 @@ stream = picamera.array.PiRGBArray(camera)
 # Take a sample picture to get the resolution
 camera.capture(stream, format='bgr')
 resolution = stream.array.shape[:2]
-downsample_scale_x = float(resolution[0]) / DOWNSAMPLE_SIZE
-downsample_scale_y = float(resolution[1]) / DOWNSAMPLE_SIZE
+downsample_scale_x = float(resolution[1]) / DOWNSAMPLE_SIZE
+downsample_scale_y = float(resolution[0]) / DOWNSAMPLE_SIZE
 
 print('Camera resolution detected to be ' + str(resolution))
 print('downsample_scale_x = ' + str(downsample_scale_x))
@@ -46,6 +47,11 @@ fgdModel = np.zeros((1,65), np.float64)
 trimmer_template = np.zeros((10,10,3), np.uint8)
 trimmer_template[:,:,1] = 255
 
+# Setup the preview window
+cv2.startWindowThread()
+cv2.namedWindow('Preview')
+cv2.imshow('Preview', np.zeros(resolution))
+
 print('Initialization Step Done.')
 print()
 
@@ -62,10 +68,10 @@ def getHeadBox(img):
     mask = cv2.grabCut(downsampled, initmask, None, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_MASK)[0]
     downsampled_bounds = cv2.boundingRect(mask[:,:,np.newaxis])
     return (
-            downsampled_bounds[0] * downsample_scale_x,
-            downsampled_bounds[1] * downsample_scale_y,
-            downsampled_bounds[2] * downsample_scale_x,
-            downsampled_bounds[3] * downsample_scale_y,
+            int(downsampled_bounds[0] * downsample_scale_x),
+            int(downsampled_bounds[1] * downsample_scale_y),
+            int(downsampled_bounds[2] * downsample_scale_x),
+            int(downsampled_bounds[3] * downsample_scale_y),
             )
 
 def getTrimmerPosition(img):
@@ -73,9 +79,15 @@ def getTrimmerPosition(img):
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
     return min_loc
 
-for i in range(100):
+while True:
     img = capture()
     head = getHeadBox(img)
     trimmer_pos = getTrimmerPosition(img)
+
+    cv2.rectangle(img, head[:2], (head[0]+head[2], head[1]+head[3]), 255, 2)
+    cv2.circle(img, trimmer_pos, 1, (0,0,255), 10)
+
+    cv2.imshow('Preview', img)
+
     print(str(head) + ' ' + str(trimmer_pos))
     print()
