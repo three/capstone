@@ -5,7 +5,6 @@ import picamera.array
 import numpy as np
 import cv2
 import math
-from matplotlib import pyplot as plt
 
 DOWNSAMPLE_SIZE = 256
 
