@@ -7,7 +7,7 @@ import cv2
 import math
 from matplotlib import pyplot as plt
 
-DOWNSAMPLE_SIZE = 128
+DOWNSAMPLE_SIZE = 256
 
 print('Setting up camera...')
 
@@ -34,9 +34,10 @@ print("Loading Bullseye and initializing buffers...")
 maskimg = cv2.imread('bullseye.png', 0)
 maskimg = cv2.resize(maskimg, (DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), interpolation = cv2.INTER_NEAREST)
 initmask = np.zeros((DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), np.uint8)
-initmask[:,:] = cv2.GC_PR_FGD
-initmask[maskimg == 0] = cv2.GC_FGD
-initmask[maskimg == 255] = cv2.GC_BGD
+initmask[:,:] = cv2.GC_PR_BGD # 1<=x<128
+initmask[maskimg > 127] = cv2.GC_PR_FGD # 128<=x<255
+initmask[maskimg == 0] = cv2.GC_BGD # x=0
+initmask[maskimg == 255] = cv2.GC_FGD # x=255
 
 # The foreground and backgroudn models for grabcut.
 # These buffers need to bre re-zeroed each time
@@ -67,6 +68,9 @@ def getHeadBox(img):
     downsampled =  cv2.resize(img, (DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), interpolation = cv2.INTER_NEAREST)
     mask = cv2.grabCut(downsampled, initmask, None, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_MASK)[0]
     downsampled_bounds = cv2.boundingRect(mask[:,:,np.newaxis])
+
+    #cv2.imshow('Preview', downsampled*mask[:,:,np.newaxis])
+
     return (
             int(downsampled_bounds[0] * downsample_scale_x),
             int(downsampled_bounds[1] * downsample_scale_y),
@@ -79,15 +83,28 @@ def getTrimmerPosition(img):
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
     return min_loc
 
+lasttime = time.time()
 while True:
     img = capture()
     head = getHeadBox(img)
     trimmer_pos = getTrimmerPosition(img)
 
     cv2.rectangle(img, head[:2], (head[0]+head[2], head[1]+head[3]), 255, 2)
+    cv2.rectangle(img, (0,trimmer_pos[1]), (resolution[1],trimmer_pos[1]), (0,0,255), 1)
+    cv2.rectangle(img, (trimmer_pos[0],0), (trimmer_pos[0],resolution[0]), (0,0,255), 1)
     cv2.circle(img, trimmer_pos, 1, (0,0,255), 10)
 
     cv2.imshow('Preview', img)
 
-    print(str(head) + ' ' + str(trimmer_pos))
-    print()
+    now = time.time()
+    elapsed = now - lasttime
+    lasttime = now
+    print('Time Elapsed: ' + str(elapsed) + 's (' + str(1/elapsed) + 'HZ)')
+
+    in_bounds_x = trimmer_pos[0] >= head[0] and trimmer_pos[0] < head[0]+head[2]
+    in_bounds_y = trimmer_pos[1] >= head[1] and trimmer_pos[1] < head[1]+head[3]
+    if (not in_bounds_x) or (not in_bounds_y):
+        print('Trimmer not on head')
+    else:
+        percent = 100 - 100 * float(trimmer_pos[1] - head[1]) / head[3]
+        print('Trimmer is '+ str(percent) + ' up the head')
