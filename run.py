@@ -1,35 +1,47 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 import time
-import picamera
-import picamera.array
 import numpy as np
 import cv2
 import math
+import argparse
 
 DOWNSAMPLE_SIZE = 256
 
-print('Setting up camera...')
+argparser = argparse.ArgumentParser(
+    description='Smart Trimmer Capstone')
+argparser.add_argument('source', type=str,
+    help='Gets passed into cv2.VideoCapture, converted to int if possible')
+args = argparser.parse_args()
 
-# Initialize the camera and a stream. The stream will be cleared and reused
-# each time
-camera = picamera.PiCamera()
-stream = picamera.array.PiRGBArray(camera)
+print('Setting up capture source...')
+capture = None
+try:
+    capture = cv2.VideoCapture(int(args.source))
+except ValueError:
+    capture = cv2.VideoCapture(args.source)
+print()
 
-# Take a sample picture to get the resolution
-camera.capture(stream, format='bgr')
-resolution = stream.array.shape[:2]
+print('Setting up Preview Window...')
+cv2.startWindowThread()
+cv2.namedWindow('Preview')
+cv2.imshow('Preview', np.zeros((256,256)))
+print()
+
+print('Taking sample image to get resolution...')
+ret, frame =  capture.read()
+cv2.imshow('Preview', frame)
+resolution = frame.shape[:2]
+print('resolution = ', resolution)
+print()
+
+print('Calculating Downsample Scaling...')
 downsample_scale_x = float(resolution[1]) / DOWNSAMPLE_SIZE
 downsample_scale_y = float(resolution[0]) / DOWNSAMPLE_SIZE
-
-print('Camera resolution detected to be ' + str(resolution))
 print('downsample_scale_x = ' + str(downsample_scale_x))
 print('downsample_scale_y = ' + str(downsample_scale_y))
 print()
 
-print("Loading Bullseye and initializing buffers...")
-
-# Load in the bullseye, which forms our starting point for grabcut. Since we downsize before grabcut,
-# the downsized image size is used
+print('Initializing Bullseye...')
 maskimg = cv2.imread('bullseye.png', 0)
 maskimg = cv2.resize(maskimg, (DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), interpolation = cv2.INTER_NEAREST)
 initmask = np.zeros((DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), np.uint8)
@@ -37,29 +49,31 @@ initmask[:,:] = cv2.GC_PR_BGD # 1<=x<128
 initmask[maskimg > 127] = cv2.GC_PR_FGD # 128<=x<255
 initmask[maskimg == 0] = cv2.GC_BGD # x=0
 initmask[maskimg == 255] = cv2.GC_FGD # x=255
+print()
 
+print('Initializing Buffers for GrabCut...')
 # The foreground and backgroudn models for grabcut.
 # These buffers need to bre re-zeroed each time
 bgdModel = np.zeros((1,65), np.float64)
 fgdModel = np.zeros((1,65), np.float64)
+print()
 
-# The template image is used to get the position of the razor
+print('Initializing Trimmer Template...')
 trimmer_template = np.zeros((10,10,3), np.uint8)
 trimmer_template[:,:,1] = 255
+print()
 
 # Setup the preview window
-cv2.startWindowThread()
-cv2.namedWindow('Preview')
-cv2.imshow('Preview', np.zeros(resolution))
 
 print('Initialization Step Done.')
 print()
 
-def capture():
-    stream.truncate()
-    stream.seek(0)
-    camera.capture(stream, format='bgr')
-    return stream.array
+def getFrame():
+    ret, frame = capture.read()
+    if ret:
+        return frame
+    else:
+        return None
 
 def getHeadBox(img):
     bgdModel.fill(0)
@@ -84,7 +98,7 @@ def getTrimmerPosition(img):
 
 lasttime = time.time()
 while True:
-    img = capture()
+    img = getFrame()
     head = getHeadBox(img)
     trimmer_pos = getTrimmerPosition(img)
 
