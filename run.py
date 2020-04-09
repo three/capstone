@@ -91,7 +91,7 @@ def getHeadBox(img):
     mask = np.where((mask == 2)|(mask == 0),0,1).astype('uint8')
 
     # Get rectangle containing points
-    contours = cv2.findContours(mask, 1, 2)[1]
+    contours = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[0]
     print('len(contours) = ', len(contours))
     downsampled_bounds = cv2.boundingRect(contours[0])
 
@@ -149,4 +149,5 @@ while True:
         print('Trimmer is '+ str(percent) + '% up the head')
 
     print('Done.')
+    cv2.waitKey()
     print()
