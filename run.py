@@ -19,17 +19,20 @@ try:
     capture = cv2.VideoCapture(int(args.source))
 except ValueError:
     capture = cv2.VideoCapture(args.source)
+capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 print()
 
 print('Setting up Preview Window...')
 cv2.startWindowThread()
-cv2.namedWindow('Preview')
-cv2.imshow('Preview', np.zeros((256,256)))
+cv2.namedWindow('Result')
+cv2.namedWindow('GrabCut')
+cv2.imshow('Result', np.zeros((256,256)))
+cv2.imshow('GrabCut', np.zeros((256,256)))
 print()
 
 print('Taking sample image to get resolution...')
 ret, frame =  capture.read()
-cv2.imshow('Preview', frame)
+cv2.imshow('Result', frame)
 resolution = frame.shape[:2]
 print('resolution = ', resolution)
 print()
@@ -46,7 +49,7 @@ maskimg = cv2.imread('bullseye.png', 0)
 maskimg = cv2.resize(maskimg, (DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), interpolation = cv2.INTER_NEAREST)
 initmask = np.zeros((DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), np.uint8)
 initmask[:,:] = cv2.GC_PR_BGD # 1<=x<128
-initmask[maskimg > 127] = cv2.GC_PR_FGD # 128<=x<255
+initmask[maskimg > 127] = cv2.GC_PR_BGD # 128<=x<255
 initmask[maskimg == 0] = cv2.GC_BGD # x=0
 initmask[maskimg == 255] = cv2.GC_FGD # x=255
 print()
@@ -76,14 +79,27 @@ def getFrame():
         return None
 
 def getHeadBox(img):
+    # The background and foreground models must be zero-ed each time
     bgdModel.fill(0)
-    bgdModel.fill(0)
+    fgdModel.fill(0)
+
+    # Downsample the image so grabcut runs faster
     downsampled =  cv2.resize(img, (DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), interpolation = cv2.INTER_NEAREST)
+
+    # Run Grabcut
     mask = cv2.grabCut(downsampled, initmask, None, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_MASK)[0]
-    downsampled_bounds = cv2.boundingRect(mask[:,:,np.newaxis])
+    mask = np.where((mask == 2)|(mask == 0),0,1).astype('uint8')
 
-    #cv2.imshow('Preview', downsampled*mask[:,:,np.newaxis])
+    # Get rectangle containing points
+    contours = cv2.findContours(mask, 1, 2)[1]
+    print('len(contours) = ', len(contours))
+    downsampled_bounds = cv2.boundingRect(contours[0])
 
+    # Show for debug purposes
+    print('downsampled_bounds = ', downsampled_bounds)
+    cv2.imshow('GrabCut', downsampled*mask[:,:,np.newaxis])
+
+    # Adjust back to un-downsized image and return
     return (
             int(downsampled_bounds[0] * downsample_scale_x),
             int(downsampled_bounds[1] * downsample_scale_y),
@@ -97,17 +113,27 @@ def getTrimmerPosition(img):
     return min_loc
 
 lasttime = time.time()
+iteration = 0
 while True:
+    print('Processing Image for frame ' + str(iteration))
+
+    print('Getting Frame...')
     img = getFrame()
+
+    print('Getting Box Around Head...')
     head = getHeadBox(img)
+    print('head = ', head)
+
+    print('Getting Trimmer Position...')
     trimmer_pos = getTrimmerPosition(img)
 
+    print('Drawing annotated image...')
     cv2.rectangle(img, head[:2], (head[0]+head[2], head[1]+head[3]), 255, 2)
     cv2.rectangle(img, (0,trimmer_pos[1]), (resolution[1],trimmer_pos[1]), (0,0,255), 1)
     cv2.rectangle(img, (trimmer_pos[0],0), (trimmer_pos[0],resolution[0]), (0,0,255), 1)
     cv2.circle(img, trimmer_pos, 1, (0,0,255), 10)
 
-    cv2.imshow('Preview', img)
+    cv2.imshow('Result', img)
 
     now = time.time()
     elapsed = now - lasttime
@@ -120,4 +146,7 @@ while True:
         print('Trimmer not on head')
     else:
         percent = 100 - 100 * float(trimmer_pos[1] - head[1]) / head[3]
-        print('Trimmer is '+ str(percent) + ' up the head')
+        print('Trimmer is '+ str(percent) + '% up the head')
+
+    print('Done.')
+    print()
