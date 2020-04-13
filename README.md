@@ -84,7 +84,7 @@ Changing `DOWNSAMPLE_SIZE` in the code will affect accuracy and performance. A l
 
 As of now the code to move the trimmer motor is not present (I can't test it since I don't have a motor).
 
-## Possible issues
+## Possible issues (Rasbien)
 
 On Rasbien, some issues may be solved by not having all packages fully updated.
 
