@@ -126,12 +126,25 @@ while True:
 
     print('Getting Trimmer Position...')
     trimmer_pos = getTrimmerPosition(img)
+    in_bounds_x = trimmer_pos[0] >= head[0] and trimmer_pos[0] < head[0]+head[2]
+    in_bounds_y = trimmer_pos[1] >= head[1] and trimmer_pos[1] < head[1]+head[3]
+    percent = None
+    if (not in_bounds_x) or (not in_bounds_y):
+        print('Trimmer not on head')
+    else:
+        percent = 100 - 100 * float(trimmer_pos[1] - head[1]) / head[3]
+        print('Trimmer is '+ str(percent) + '% up the head')
 
     print('Drawing annotated image...')
     cv2.rectangle(img, head[:2], (head[0]+head[2], head[1]+head[3]), 255, 2)
     cv2.rectangle(img, (0,trimmer_pos[1]), (resolution[1],trimmer_pos[1]), (0,0,255), 1)
     cv2.rectangle(img, (trimmer_pos[0],0), (trimmer_pos[0],resolution[0]), (0,0,255), 1)
     cv2.circle(img, trimmer_pos, 1, (0,0,255), 10)
+
+    percent_str = 'Trimmer not on head'
+    if percent is not None:
+        percent_str = 'Position up head: ' + str(round(percent)) + '%'
+    cv2.putText(img, percent_str, (30,30), cv2.FONT_HERSHEY_PLAIN, 1, (0,0,0))
 
     cv2.imshow('Result', img)
 
@@ -140,13 +153,6 @@ while True:
     lasttime = now
     print('Time Elapsed: ' + str(elapsed) + 's (' + str(1/elapsed) + 'HZ)')
 
-    in_bounds_x = trimmer_pos[0] >= head[0] and trimmer_pos[0] < head[0]+head[2]
-    in_bounds_y = trimmer_pos[1] >= head[1] and trimmer_pos[1] < head[1]+head[3]
-    if (not in_bounds_x) or (not in_bounds_y):
-        print('Trimmer not on head')
-    else:
-        percent = 100 - 100 * float(trimmer_pos[1] - head[1]) / head[3]
-        print('Trimmer is '+ str(percent) + '% up the head')
 
     print('Done.')
     cv2.waitKey()
