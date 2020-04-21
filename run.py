@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 import math
 import argparse
+import os
 
 DOWNSAMPLE_SIZE = 256
 
@@ -11,6 +12,9 @@ argparser = argparse.ArgumentParser(
     description='Smart Trimmer Capstone')
 argparser.add_argument('source', type=str,
     help='Gets passed into cv2.VideoCapture, converted to int if possible')
+argparser.add_argument('--video', dest='video', action='store_true')
+argparser.add_argument('--no-video', dest='video', action='store_false')
+argparser.set_defaults(video=False)
 args = argparser.parse_args()
 
 print('Setting up capture source...')
@@ -22,17 +26,19 @@ except ValueError:
 capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 print()
 
-print('Setting up Preview Window...')
-cv2.startWindowThread()
-cv2.namedWindow('Result')
-cv2.namedWindow('GrabCut')
-cv2.imshow('Result', np.zeros((256,256)))
-cv2.imshow('GrabCut', np.zeros((256,256)))
-print()
+if not args.video:
+    print('Setting up Preview Window...')
+    cv2.startWindowThread()
+    cv2.namedWindow('Result')
+    cv2.namedWindow('GrabCut')
+    cv2.imshow('Result', np.zeros((256,256)))
+    cv2.imshow('GrabCut', np.zeros((256,256)))
+    print()
 
 print('Taking sample image to get resolution...')
 ret, frame =  capture.read()
-cv2.imshow('Result', frame)
+if not args.video:
+    cv2.imshow('Result', frame)
 resolution = frame.shape[:2]
 print('resolution = ', resolution)
 print()
@@ -45,7 +51,7 @@ print('downsample_scale_y = ' + str(downsample_scale_y))
 print()
 
 print('Initializing Bullseye...')
-maskimg = cv2.imread('bullseye.png', 0)
+maskimg = cv2.imread('bullseye2.png', 0)
 maskimg = cv2.resize(maskimg, (DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), interpolation = cv2.INTER_NEAREST)
 initmask = np.zeros((DOWNSAMPLE_SIZE, DOWNSAMPLE_SIZE), np.uint8)
 initmask[:,:] = cv2.GC_PR_BGD # 1<=x<128
@@ -62,8 +68,7 @@ fgdModel = np.zeros((1,65), np.float64)
 print()
 
 print('Initializing Trimmer Template...')
-trimmer_template = np.zeros((10,10,3), np.uint8)
-trimmer_template[:,:,1] = 255
+trimmer_template = cv2.imread('template.png')
 print()
 
 # Setup the preview window
@@ -93,11 +98,15 @@ def getHeadBox(img):
     # Get rectangle containing points
     contours = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)[0]
     print('len(contours) = ', len(contours))
-    downsampled_bounds = cv2.boundingRect(contours[0])
+
+    contour = max(contours, key = cv2.contourArea)
+    downsampled_bounds = cv2.boundingRect(contour)
 
     # Show for debug purposes
     print('downsampled_bounds = ', downsampled_bounds)
-    cv2.imshow('GrabCut', downsampled*mask[:,:,np.newaxis])
+
+    if not args.video:
+        cv2.imshow('GrabCut', downsampled*mask[:,:,np.newaxis])
 
     # Adjust back to un-downsized image and return
     return (
@@ -146,7 +155,10 @@ while True:
         percent_str = 'Position up head: ' + str(round(percent)) + '%'
     cv2.putText(img, percent_str, (30,30), cv2.FONT_HERSHEY_PLAIN, 1, (0,0,0))
 
-    cv2.imshow('Result', img)
+    if args.video:
+        cv2.imwrite(os.getcwd() + '/out/frame' + str(iteration) + '.png', img)
+    else:
+        cv2.imshow('Result', img)
 
     now = time.time()
     elapsed = now - lasttime
@@ -157,3 +169,5 @@ while True:
     print('Done.')
     cv2.waitKey()
     print()
+
+    iteration += 1
